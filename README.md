@@ -97,4 +97,4 @@ public class MjBankUserDetailsService implements UserDetailsService {
 }
 ~~~
 _MjBankUserDetailsService 클래스에서 경고 -> class can be record_  
-_jdk14 부터 record 클래스가 추가됨. 자세한 내용 확인해볼 것_  
+_jdk14 부터 record 클래스가 추가되었음. 자세한 내용 확인해볼 것_  
