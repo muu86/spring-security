@@ -116,3 +116,134 @@ _jdk14 부터 record 클래스가 추가되었음. 자세한 내용 확인해볼
    - Pbkdf2PasswordEncoder: 다이제스트 + 솔트 방식에 반복횟수를 지정할 수 있음.
    - BcryptPasswordEncoder: 해쉬함수가 의도적으로 느리게 만들어졌음. 스프링 시큐리티가 권장하고 시간을 1초로 튜닝 권함.
    - ScryptPasswordEncoder: 하드웨어 사용량을 입력으로 넣어서 더 느리게.
+
+### Authentication Provider, Manager
+AuthenticationProvicer: UserDetails 와 PasswordEncoder를 이용하여 유저 인증 여부를 결정하는 컴포넌트.  
+username, password 외 다른 custom 인증방법이 필요한 경우 AuthenticationProvider를 직접 구현하여 추가할 수 있다.  
+구현체 => DaoAuthenticationProvider: UserDetailsService를 이용해서 유저를 인증.  
+
+AuthenticationManager: Provider List를 가지고 supports 메소드가 true를 리턴한 Provider의 authenticate 메서드를 호출함.  
+구현체 => ProviderManager  
+```java
+public interface AuthenticationProvider {
+    
+	Authentication authenticate(Authentication authentication) throws AuthenticationException;
+
+	boolean supports(Class<?> authentication);
+
+}
+```
+```java
+public class ProviderManager implements AuthenticationManager, MessageSourceAware, InitializingBean {
+    // ...
+    private List<AuthenticationProvider> providers = Collections.emptyList();
+    // ...
+    @Override
+    public Authentication authenticate(Authentication authentication) throws AuthenticationException {
+       // ..
+       for (AuthenticationProvider provider : getProviders()) {
+          if (!provider.supports(toTest)) {
+             continue;
+          }
+          if (logger.isTraceEnabled()) {
+             logger.trace(LogMessage.format("Authenticating request with %s (%d/%d)",
+                     provider.getClass().getSimpleName(), ++currentPosition, size));
+          }
+          try {
+             result = provider.authenticate(authentication);
+             if (result != null) {
+                copyDetails(authentication, result);
+                break;
+             }
+          }
+          catch (AccountStatusException | InternalAuthenticationServiceException ex) {
+             prepareException(ex, authentication);
+             // SEC-546: Avoid polling additional providers if auth failure is due to
+             // invalid account status
+             throw ex;
+          }
+          catch (AuthenticationException ex) {
+             lastException = ex;
+          }
+       }
+       //..
+    }
+}
+```
+
+### Authentication 인터페이스
+org.springframework.security.core.Authentication
+java.security.Principal  
+Authentication 인터페이스는 자바 표준 라이브러리의 Principal 을 상속하여 확장함
+
+
+Principal은 하나의 메소드를 가짐: getName()  
+Authentication 은 여기에 isAuthenticated(), getAuthorites() 등 유저 인증에 관한 메서드를 추가  
+
+
+#### AbstractUserDetailsAuthenticationProvider
+DaoAuthenticationProvider 가 상속 받는 클래스로 authenticate 메서드를 가지고 있다.  
+```java
+public abstract class AbstractUserDetailsAuthenticationProvider
+		implements AuthenticationProvider, InitializingBean, MessageSourceAware {
+
+   @Override
+   public Authentication authenticate(Authentication authentication)
+           throws AuthenticationException {
+      // ...
+      return createSuccessAuthentication(principalToReturn, authentication, user);
+   }
+   
+   protected Authentication createSuccessAuthentication(Object principal,
+           Authentication authentication,
+           UserDetails user) {
+      UsernamePasswordAuthenticationToken result = new UsernamePasswordAuthenticationToken(
+              principal,
+              authentication.getCredentials(),
+              this.authoritiesMapper.mapAuthorities(user.getAuthorities()));
+      result.setDetails(authentication.getDetails());
+      this.logger.debug("Authenticated user");
+      return result;
+   }
+}
+```
+
+
+직접 구현한 AuthenticationProvider  
+```java
+@Component
+public class MjBankUsernamePwdAuthenticationProvider implements AuthenticationProvider {
+
+    @Autowired
+    private CustomerRepository customerRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Override
+    public Authentication authenticate(Authentication authentication)
+        throws AuthenticationException {
+
+        String username = authentication.getName();
+        String pwd = authentication.getCredentials().toString();
+        List<Customers> customers = customerRepository.findByEmail(username);
+        if (customers.size() > 0) {
+            if (passwordEncoder.matches(pwd, customers.get(0).getPwd())) {
+                List<GrantedAuthority> authorities = new ArrayList<>();
+                authorities.add(new SimpleGrantedAuthority(customers.get(0).getRole()));
+                return new UsernamePasswordAuthenticationToken(username, pwd, authorities);
+            } else {
+                throw new BadCredentialsException("비밀번호가 틀렸음...");
+            }
+        } else {
+            throw new BadCredentialsException("없는 유저임.");
+        }
+    }
+
+    @Override
+    public boolean supports(Class<?> authentication) {
+        return authentication.equals(UsernamePasswordAuthenticationToken.class);
+    }
+}
+```
+
