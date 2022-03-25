@@ -1,6 +1,6 @@
 package com.mj.securitystudy.repository;
 
-import com.mj.securitystudy.model.Customer;
+import com.mj.securitystudy.model.Customers;
 import com.mj.securitystudy.model.SecurityCustomer;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +17,7 @@ public class MjBankUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        List<Customer> customer = customerRepository.findByEmail(username);
+        List<Customers> customer = customerRepository.findByEmail(username);
         if (customer.size() == 0) {
             throw new UsernameNotFoundException("UserDetails not found for the user : " + username);
         }
