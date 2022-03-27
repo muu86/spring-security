@@ -327,3 +327,145 @@ spring-security 에서 Role 은 'ROLE_' 접두사로 시작해야 한다.
 비슷하지만 mvcMatcher를 사용하는 것이 더 안전하다.  
 antMatchers("/secured") 는 /secured 경로만 매치되는 반면,
 mvcMatchers("/secured") 는 /secured/, /secured.html 등에도 매칭됨  
+
+### Filter 구현하기
+#### 스프링 시큐리티 필터
+```java
+ private static final class VirtualFilterChain implements FilterChain {
+
+     private final List<Filter> additionalFilters;
+
+     private final int size;
+
+     private int currentPosition = 0;
+
+     @Override
+     public void doFilter(ServletRequest request, ServletResponse response) throws IOException, ServletException {
+         if (this.currentPosition == this.size) {
+             if (logger.isDebugEnabled()) {
+                 logger.debug(LogMessage.of(() -> "Secured " + requestLine(this.firewalledRequest)));
+             }
+             // Deactivate path stripping as we exit the security filter chain
+             this.firewalledRequest.reset();
+             this.originalChain.doFilter(request, response);
+             return;
+         }
+         this.currentPosition++;
+         Filter nextFilter = this.additionalFilters.get(this.currentPosition - 1);
+         if (logger.isTraceEnabled()) {
+             logger.trace(LogMessage.format("Invoking %s (%d/%d)", nextFilter.getClass().getSimpleName(),
+                     this.currentPosition, this.size));
+         }
+         nextFilter.doFilter(request, response, this);
+     }
+
+ }
+```
+additionalFilters 에 담긴 Filter의 doFilter 메서드를 하나씩 호출하는 방식으로 구현되어 있음.  
+
+#### addFilterBefore
+security 설정파일에서 **addFilterBefore** 메서드를 이용하여 custom Filter를 삽입하는 것이 가능.  
+```java
+public class RequestValidationBeforeFilter implements Filter {
+
+    public static final String AUTHENTICATION_SCHEME_BASIC = "Basic";
+
+    private Charset credentialsCharset = StandardCharsets.UTF_8;
+
+    @Override
+    public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse,
+        FilterChain filterChain) throws IOException, ServletException {
+
+        HttpServletRequest req = (HttpServletRequest) servletRequest;
+        HttpServletResponse resp = (HttpServletResponse) servletResponse;
+        String header = req.getHeader(AUTHORIZATION);
+        if (header != null) {
+            header = header.trim();
+            if (StringUtils.startsWithIgnoreCase(header, AUTHENTICATION_SCHEME_BASIC)) {
+                byte[] base64Token = header.substring(6).getBytes(StandardCharsets.UTF_8);
+                byte[] decoded;
+                try {
+                    decoded = Base64.getDecoder().decode(base64Token);
+                    String token = new String(decoded, getCredentialsCharset(req));
+                    int delim = token.indexOf(":");
+                    if (delim == -1) {
+                        throw new BadCredentialsException("유효하지 않은 인증 토큰입니다.");
+                    }
+                    String email = token.substring(0, delim);
+                    if (email.toLowerCase().contains("test")) {
+                        resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                        return;
+                    }
+                } catch (IllegalArgumentException e) {
+                    throw new BadCredentialsException("토큰 디코딩 실패");
+                }
+            }
+        }
+        filterChain.doFilter(servletRequest, servletResponse);
+    }
+
+    protected Charset getCredentialsCharset(HttpServletRequest request) {
+        return getCredentialsCharset();
+    }
+
+    public Charset getCredentialsCharset() {
+        return this.credentialsCharset;
+    }
+}
+```
+```java
+@Configuration
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+
+   @Override
+   protected void configure(HttpSecurity http) throws Exception {
+      http
+              // ...
+              .addFilterBefore(new RequestValidationBeforeFilter(), BasicAuthenticationFilter.class)
+              // ...
+   }
+}
+```
+
+#### addFilterAfter
+```java
+@Slf4j
+public class AuthoritiesLoggingAfterFilter implements Filter {
+
+    @Override
+    public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse,
+        FilterChain filterChain) throws IOException, ServletException {
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (null != authentication) {
+            log.info("인증 성공! [{}] / 권한 [{}]", authentication.getName(),
+                authentication.getAuthorities().toString());
+        }
+
+        filterChain.doFilter(servletRequest, servletResponse);
+    }
+}
+```
+
+#### addFilterAt(filterA, filterB.class)
+필터B 위치에 필터A 삽입. 필터B를 대체하지 않음. 둘의 chain 순서는 랜덤이다.  
+```java
+@Slf4j
+public class AuthoritiesLoggingAtFilter implements Filter {
+
+    @Override
+    public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse,
+        FilterChain filterChain) throws IOException, ServletException {
+
+        log.info("인증 진행 중..");
+        filterChain.doFilter(servletRequest, servletResponse);
+    }
+}
+```
+
+#### GenericFilterBean, OncePerRequestFilter
+GenericFilterBean: custom Filter를 구현하는데 도움이 될 수 있는 시큐리티 제공 추상 클래스  
+OncePerRequestFilter: 스프링시큐리티는 리퀘스트 한번에 필터 한번이 실행되는 것을 보장하지 않는다. 이를 보장하는 클래스.  
+BasicAuthenticationFilter 가 OncePerRequestFilter를 상속함!  
+
+
