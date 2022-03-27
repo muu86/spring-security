@@ -1,8 +1,11 @@
 package com.mj.securitystudy.controller;
 
+import com.mj.securitystudy.model.Accounts;
+import com.mj.securitystudy.model.Customer;
 import com.mj.securitystudy.repository.AccountsRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 @RequiredArgsConstructor
@@ -11,8 +14,8 @@ public class AccountController {
 
     private final AccountsRepository accountsRepository;
 
-    @GetMapping("/my-account")
-    public String getAccountDetails(String input) {
-        return "내 정보";
+    @PostMapping("/my-account")
+    public Accounts getAccountDetails(@RequestBody Customer customer) {
+        return accountsRepository.findByCustomerId(customer.getId());
     }
 }

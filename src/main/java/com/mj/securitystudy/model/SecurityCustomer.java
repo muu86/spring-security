@@ -16,7 +16,7 @@ public class SecurityCustomer implements UserDetails {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    private final Customers customer;
+    private final Customer customer;
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

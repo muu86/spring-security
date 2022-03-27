@@ -1,6 +1,6 @@
 package com.mj.securitystudy.config;
 
-import com.mj.securitystudy.model.Customers;
+import com.mj.securitystudy.model.Customer;
 import com.mj.securitystudy.repository.CustomerRepository;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,7 +29,7 @@ public class MjBankUsernamePwdAuthenticationProvider implements AuthenticationPr
 
         String username = authentication.getName();
         String pwd = authentication.getCredentials().toString();
-        List<Customers> customers = customerRepository.findByEmail(username);
+        List<Customer> customers = customerRepository.findByEmail(username);
         if (customers.size() > 0) {
             if (passwordEncoder.matches(pwd, customers.get(0).getPwd())) {
                 List<GrantedAuthority> authorities = new ArrayList<>();

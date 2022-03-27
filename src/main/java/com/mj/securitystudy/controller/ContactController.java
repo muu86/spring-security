@@ -1,22 +1,27 @@
 package com.mj.securitystudy.controller;
 
-import java.util.Enumeration;
-import javax.servlet.http.HttpSession;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.web.bind.annotation.GetMapping;
+import com.mj.securitystudy.model.Contact;
+import com.mj.securitystudy.repository.ContactRepository;
+import java.sql.Date;
+import java.util.Random;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+@RequiredArgsConstructor
 @RestController
 public class ContactController {
 
-    private final Logger logger = LoggerFactory.getLogger(this.getClass());
+//    private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
-    @GetMapping("/contact")
-    public String saveContactInquiryDetails(String input) {
-        return "문의 내용이 저장되었습니다";
+    private final ContactRepository contactRepository;
+
+    @PostMapping("/contact")
+    public Contact saveContactInquiryDetails(@RequestBody Contact contact) {
+        contact.setContactId(getServiceReqNumber());
+        contact.setCreateDt(new Date(System.currentTimeMillis()));
+        return contactRepository.save(contact);
     }
 
 //    @GetMapping("/contact")
@@ -30,10 +35,16 @@ public class ContactController {
 //        return "문의 내용이 저장되었습니다.";
 //    }
 
-    @GetMapping("/contact-1")
+    /*@GetMapping("/contact-1")
     public String logUserDetails(String input, Authentication authentication) {
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
         logger.info("userDetails.userName={}", userDetails.getUsername());
         return "문의 내용이 저장되었습니다.";
+    }*/
+
+    private String getServiceReqNumber() {
+        Random random = new Random();
+        int ranNum = random.nextInt(999999999 - 9999) + 9999;
+        return "SR" + ranNum;
     }
 }
