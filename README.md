@@ -247,3 +247,60 @@ public class MjBankUsernamePwdAuthenticationProvider implements AuthenticationPr
 }
 ```
 
+### CSRF 이슈 (Cross Site Request Forgery)
+사용자가 피해사이트에 로그인한 상태로 세션데이터를 가지고 있고 해커가 악용사이트에서 이 세션 정보를 이용하여 피해사이트로 위조된  
+요청을 하는 것  
+보호 방법: 피해사이트에서 CSRF 토큰을 발행하고 이 토큰을 가지고 있는 요청만 정당한 요청으로 판단함으로써 CSRF 를 예방할 수 있다.  
+```java
+@Configuration
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+
+   /*
+   /my-account - secured
+   /my-balance - secured
+   /my-loans   - secured
+   /my-cards   - secured
+
+   /notices    - not secured
+   /contact    - not secured
+    */
+   @Override
+   protected void configure(HttpSecurity http) throws Exception {
+      http
+              .cors().configurationSource(request -> {
+                 CorsConfiguration config = new CorsConfiguration();
+                 config.setAllowedOrigins(Collections.singletonList("http://localhost:4200"));
+                 config.setAllowedMethods(Collections.singletonList("*"));
+                 config.setAllowCredentials(true);
+                 config.setAllowedHeaders(Collections.singletonList("*"));
+                 config.setMaxAge(3600L);
+                 return config;
+              })
+              .and()
+              .csrf().ignoringAntMatchers("/contact")
+              .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+              .and()
+              //...
+              .httpBasic();
+   }
+}
+```
+spring security **CsrfConfigurer** 에 **CsrfTokenRepository**(인터페이스)를 멤버로 세팅함.  
+**CsrfTokenRepository** 의 구현체는 **CookieCsrfTokenRepository**  
+```java
+public final class CookieCsrfTokenRepository implements CsrfTokenRepository {
+
+   static final String DEFAULT_CSRF_COOKIE_NAME = "XSRF-TOKEN";
+
+   static final String DEFAULT_CSRF_PARAMETER_NAME = "_csrf";
+
+   static final String DEFAULT_CSRF_HEADER_NAME = "X-XSRF-TOKEN";
+}
+```
+   - 클라이언트가 GET 요청을 보냈을 때 서버는 Set-cookie 헤더로 생성된 XSRF-TOKEN을 보냄
+   - 브라우저가 쿠키에 토큰을 set
+   - POST 요청을 할 때 브라우저는 request 헤더에 토큰을 담고
+   - 브라우저가 헤더와 쿠키를 함께 서버로 전달
+   - 서버는 쿠키의 토큰 정보와 헤더의 토큰 정보를 비교하여 요청을 승인/거부
+   - **CookieCsrfTokenRepository**의 withHttpOnlyFalse 메서드는 Angular 등의 js 코드가 쿠키정보를 읽을 수 있도록 허용한다.
+   - csrf 적용을 원하지 않는 경로는 **ignoringAntMatchers**메서드로 해결가능
