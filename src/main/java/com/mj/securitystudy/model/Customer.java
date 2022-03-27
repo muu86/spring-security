@@ -1,11 +1,14 @@
 package com.mj.securitystudy.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import java.util.Set;
 import javax.persistence.Column;
 import javax.persistence.Entity;
+import javax.persistence.FetchType;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
+import javax.persistence.OneToMany;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -33,4 +36,8 @@ public class Customer {
 
     @Column(name = "create_dt")
     private String createDt;
+
+    @JsonIgnore
+    @OneToMany(mappedBy = "customer", fetch = FetchType.EAGER)
+    private Set<Authority> authorites;
 }

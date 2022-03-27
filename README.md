@@ -304,3 +304,26 @@ public final class CookieCsrfTokenRepository implements CsrfTokenRepository {
    - 서버는 쿠키의 토큰 정보와 헤더의 토큰 정보를 비교하여 요청을 승인/거부
    - **CookieCsrfTokenRepository**의 withHttpOnlyFalse 메서드는 Angular 등의 js 코드가 쿠키정보를 읽을 수 있도록 허용한다.
    - csrf 적용을 원하지 않는 경로는 **ignoringAntMatchers**메서드로 해결가능
+
+### Authentication(인증) VS Authorization(권한)
+```java
+public interface UserDetails extends Serializable {
+   Collection<? extends GrantedAuthority> getAuthorities();
+}
+```
+```java
+public interface GrantedAuthority extends Serializable {
+	String getAuthority();
+}
+```
+
+#### Authorities VS Role
+권한과 역할  
+역할은 권한들의 집합일 수 있다.  
+spring-security 에서 Role 은 'ROLE_' 접두사로 시작해야 한다.  
+
+
+### MvcMatchers VS antMatchers
+비슷하지만 mvcMatcher를 사용하는 것이 더 안전하다.  
+antMatchers("/secured") 는 /secured 경로만 매치되는 반면,
+mvcMatchers("/secured") 는 /secured/, /secured.html 등에도 매칭됨  
