@@ -2,12 +2,16 @@ package com.mj.securitystudy.config;
 
 import com.mj.securitystudy.filter.AuthoritiesLoggingAfterFilter;
 import com.mj.securitystudy.filter.AuthoritiesLoggingAtFilter;
+import com.mj.securitystudy.filter.JWTTokenValidatorFilter;
+import com.mj.securitystudy.filter.JwtTokenGeneratorFilter;
 import com.mj.securitystudy.filter.RequestValidationBeforeFilter;
+import java.util.Arrays;
 import java.util.Collections;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
@@ -28,22 +32,27 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
     @Override
     protected void configure(HttpSecurity http) throws Exception {
         http
+            .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS).and()
             .cors().configurationSource(request -> {
                 CorsConfiguration config = new CorsConfiguration();
                 config.setAllowedOrigins(Collections.singletonList("http://localhost:4200"));
                 config.setAllowedMethods(Collections.singletonList("*"));
                 config.setAllowCredentials(true);
                 config.setAllowedHeaders(Collections.singletonList("*"));
+                config.setExposedHeaders(Arrays.asList("Authorization"));
                 config.setMaxAge(3600L);
                 return config;
-            })
-            .and()
-            .csrf().ignoringAntMatchers("/contact")
+            }).and()
+            .csrf().disable()
+            /*
+            .ignoringAntMatchers("/contact")
             .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-            .and()
+             */
             .addFilterBefore(new RequestValidationBeforeFilter(), BasicAuthenticationFilter.class)
             .addFilterAfter(new AuthoritiesLoggingAfterFilter(), BasicAuthenticationFilter.class)
             .addFilterAt(new AuthoritiesLoggingAtFilter(), BasicAuthenticationFilter.class)
+            .addFilterAfter(new JwtTokenGeneratorFilter(), BasicAuthenticationFilter.class)
+            .addFilterBefore(new JWTTokenValidatorFilter(), BasicAuthenticationFilter.class)
             .authorizeRequests()
             .antMatchers("/my-account").hasRole("USER")
             .antMatchers("/my-balance").hasAnyRole("USER", "ADMIN")
@@ -52,10 +61,8 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
             .antMatchers("/notices").permitAll()
             .antMatchers("/contact").permitAll()
             // deny
-            .antMatchers("/deny").denyAll()
-            .and()
-            .formLogin()
-            .and()
+            .antMatchers("/deny").denyAll().and()
+            .formLogin().and()
             .httpBasic();
     }
 

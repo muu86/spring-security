@@ -1,4 +1,5 @@
 ## 스프링 시큐리티
+<img width="716" alt="스크린샷 2022-03-30 오후 10 14 52" src="https://user-images.githubusercontent.com/71859468/160843096-e976c156-6f1a-4906-86e1-228cc63b79ab.png">
 
 ### User인터페이스 이해
 
@@ -209,7 +210,7 @@ public abstract class AbstractUserDetailsAuthenticationProvider
 ```
 
 
-직접 구현한 AuthenticationProvider  
+직접 구현한 **AuthenticationProvider**  
 ```java
 @Component
 public class MjBankUsernamePwdAuthenticationProvider implements AuthenticationProvider {
@@ -468,4 +469,113 @@ GenericFilterBean: custom Filter를 구현하는데 도움이 될 수 있는 시
 OncePerRequestFilter: 스프링시큐리티는 리퀘스트 한번에 필터 한번이 실행되는 것을 보장하지 않는다. 이를 보장하는 클래스.  
 BasicAuthenticationFilter 가 OncePerRequestFilter를 상속함!  
 
+#### JWT(Json Web Token)
+3 파트로 나뉨.  
+**Header.Payload.Signature(Optional)**  
+유저 인증에 사용. 뿐만 아니라 유저 관련 데이터도 서버로 전송가능(header, payload). 세션에 데이터를 보관하는 부담을 덜 수 있음.  
+> Header: 해쉬알고리즘, 타입(jwt)
 
+> Payload 파트 : 유저 관련 정보. ex) name, role...
+
+> Signature 파트 : JWT는 Header와 Payload 를 담는 json 포맷을 base64로 인코딩한 것 -> 쉽게 위변조가 가능하다.  
+Signature 파트는 Header와 Payload를 secret를 묶어 Header에 명시된 해쉬함수로 암호화한 것.  
+해쉬함수(header + '.' + payload, secret)  
+
+JWT 사용   
+=> CSRF 토큰, spring-security 기본 발행 토큰(JSESSIONID) 필요없다.  
+JWT 자체로 현재 요청이 정당한 유저에 의한 요청임을 증명하기 때문.  
+```java
+   http
+      .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS).and()
+        ...
+      .csrf().disable()
+       /*
+      .ignoringAntMatchers("/contact")
+      .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+       */
+```
+jjwt 라이브러리 사용  
+서버에서 사용자 첫 인증 시 jwt 토큰 발급
+```java
+// 로그인 시 jwt 토큰을 한번만 발행
+public class JwtTokenGeneratorFilter extends OncePerRequestFilter {
+
+   @Override
+   protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
+           FilterChain filterChain) throws ServletException, IOException {
+
+      Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+      if (null != authentication) {
+         SecretKey key = Keys.hmacShaKeyFor(
+                 SecurityConstants.JWT_KEY.getBytes(StandardCharsets.UTF_8)); // 서버가 특정한 키
+         String jwt = Jwts.builder().setIssuer("mj bank").setSubject("JWT Token")
+                 .claim("username", authentication.getName())
+                 .claim("authorities", populateAuthorities(authentication.getAuthorities()))
+                 .setIssuedAt(new Date())
+                 .setExpiration(new Date(new Date().getTime() + 30000))
+                 .signWith(key).compact();// 헤더, 페이로드를 키로 암호화
+
+         response.setHeader(SecurityConstants.JWT_HEADER, jwt); // response header 에 token 전송
+      }
+
+      filterChain.doFilter(request, response);
+   }
+
+   @Override
+   protected boolean shouldNotFilter(HttpServletRequest request) {
+      // `/user` 로 들어온 요청에만 이 필터를 적용
+      return !request.getServletPath().equals("/user");
+   }
+
+
+   private String populateAuthorities(Collection<? extends GrantedAuthority> collection) {
+      Set<String> authoritiesSet = new HashSet<>();
+
+      for (GrantedAuthority authority : collection) {
+         authoritiesSet.add(authority.getAuthority());
+      }
+
+      return String.join(",", authoritiesSet);
+   }
+}
+```
+
+사용자가 요청마다 토큰을 헤더에 담아 보내고 서버는 매 요청마다 검증
+```java
+public class JWTTokenValidatorFilter extends OncePerRequestFilter {
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
+        FilterChain filterChain) throws ServletException, IOException {
+
+        String jwt = request.getHeader(SecurityConstants.JWT_HEADER);
+        if (null != jwt) {
+            try {
+                SecretKey secretKey = Keys.hmacShaKeyFor(
+                    SecurityConstants.JWT_KEY.getBytes(StandardCharsets.UTF_8));
+
+                Claims claims = Jwts.parserBuilder()
+                    .setSigningKey(secretKey)
+                    .build()
+                    .parseClaimsJws(jwt)    // request header로 전송된 jwt를 parse
+                    .getBody();
+                String username = claims.get("username", String.class);
+                String authorities = claims.get("authorities", String.class);
+                Authentication auth = new UsernamePasswordAuthenticationToken(
+                    username, null,
+                    AuthorityUtils.commaSeparatedStringToAuthorityList(authorities));
+                SecurityContextHolder.getContext().setAuthentication(auth);
+            } catch (Exception e) {
+                throw new BadCredentialsException("Invalid Token received");
+            }
+        }
+
+        filterChain.doFilter(request, response);
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return request.getServletPath().equals("/user");
+    }
+}
+```
