@@ -60,7 +60,7 @@ UserDetailsService의 findByUser 메소드는 테이블명, 컬럼명이 고정�
 ~~~java
 @RequiredArgsConstructor
 public class SecurityCustomer implements UserDetails {
-
+   
     @Serial
     private static final long serialVersionUID = 1L;
 
@@ -182,7 +182,7 @@ Principal은 하나의 메소드를 가짐: getName()
 Authentication 은 여기에 isAuthenticated(), getAuthorites() 등 유저 인증에 관한 메서드를 추가  
 
 
-#### AbstractUserDetailsAuthenticationProvider
+### AbstractUserDetailsAuthenticationProvider
 DaoAuthenticationProvider 가 상속 받는 클래스로 authenticate 메서드를 가지고 있다.  
 ```java
 public abstract class AbstractUserDetailsAuthenticationProvider
@@ -318,7 +318,7 @@ public interface GrantedAuthority extends Serializable {
 }
 ```
 
-#### Authorities VS Role
+### Authorities VS Role
 권한과 역할  
 역할은 권한들의 집합일 수 있다.  
 spring-security 에서 Role 은 'ROLE_' 접두사로 시작해야 한다.  
@@ -464,12 +464,12 @@ public class AuthoritiesLoggingAtFilter implements Filter {
 }
 ```
 
-#### GenericFilterBean, OncePerRequestFilter
+### GenericFilterBean, OncePerRequestFilter
 GenericFilterBean: custom Filter를 구현하는데 도움이 될 수 있는 시큐리티 제공 추상 클래스  
 OncePerRequestFilter: 스프링시큐리티는 리퀘스트 한번에 필터 한번이 실행되는 것을 보장하지 않는다. 이를 보장하는 클래스.  
 BasicAuthenticationFilter 가 OncePerRequestFilter를 상속함!  
 
-#### JWT(Json Web Token)
+### JWT(Json Web Token)
 3 파트로 나뉨.  
 **Header.Payload.Signature(Optional)**  
 유저 인증에 사용. 뿐만 아니라 유저 관련 데이터도 서버로 전송가능(header, payload). 세션에 데이터를 보관하는 부담을 덜 수 있음.  
@@ -579,3 +579,55 @@ public class JWTTokenValidatorFilter extends OncePerRequestFilter {
     }
 }
 ```
+
+### Method Level Security
+**@EnableGlobalMethodSecurity**: 메소드 레벨 시큐리티를 활성화하는 어노테이션 ( **@Configuration** 클래스에 설정)  
+Aop 기반 동작. 메소드 호출 전 Interceptor가 인증 유저인지 아닌지를 체크한다.  
+
+메소드 레벨 시큐리티가 해결하는 두 가지 관점  
+- Invocation authorization: 메서드를 호출할 권한이 있는 지  
+- Filtering authorization: 메소드 argument를 세팅하거나 리턴 값을 필터링
+
+@EnableGlobalMethodSecurity 어노테이션 설정
+- prePostEnabled: **@PreAuthorize**, **@PostAuthorize** 어노테이션 활성화
+- securedEnabled: **@Secured** 어노테이션 활성화
+- jsr250Enabled: **@RoleAllowed** 어노테이션 활성화
+
+#### @PreAuthorize, @PostAuthorize
+**@PreAuthorize**: Authentication 객체에 담겨있는 유저 데이터와 인자로 받은 스프링 표현식을 비교하여 메서드 호출 여부를 판단  
+**@PostAuthorize**: 메소드가 호출되고 난 뒤에 판단  
+```java
+@PostMapping("/my-loans")
+@PostAuthorize("hasRole('ROOT')")
+public List<Loans> getLoanDetails(@RequestBody Customer customer) {
+     List<Loans> loans = loanRepository.findByCustomerIdOrderByStartDtDesc(customer.getId());
+     return loans;
+}
+```
+ROOT 역할이 없는 사용자가 메서드 호출 시 403(forbidden status) 리턴  
+```java
+public interface PermissionEvaluator extends AopInfrastructureBean {
+
+	boolean hasPermission(Authentication authentication, Object targetDomainObject, Object permission);
+
+	boolean hasPermission(Authentication authentication, Serializable targetId, String targetType, Object permission);
+
+}
+```
+@PostAuthorize, @PreAuthorize 인자로 넣은 스프링 표현식을 PermissionEvaluator가 판단함.  
+
+#### @PreFilter, @PostFilter
+메서드가 컬렉션을 리턴할 때 필터링.
+```java
+ @PostMapping("/my-loans")
+//	@PostAuthorize("hasRole('ROOT')")
+ @PostFilter("filterObject.username == authentication.principal.username")
+ public List<Loans> getLoanDetails(@RequestBody Customer customer) {
+     List<Loans> loans = loanRepository.findByCustomerIdOrderByStartDtDesc(customer.getId());
+     return loans;
+ }
+```
+**@PostFilter**: 필터와 관계없이 메서드는 실행되고 db에 모든 데이터를 저장 혹은 조회 후 결과를 필터, rollback (X)  
+**@PreFilter**: db에서 모든 데이터를 가져오고 필터링 후 커밋 -> 리턴, 성능 불리.  
+
+

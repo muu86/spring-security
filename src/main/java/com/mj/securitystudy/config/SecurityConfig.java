@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -19,6 +20,7 @@ import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.web.cors.CorsConfiguration;
 
 @Configuration
+@EnableGlobalMethodSecurity(prePostEnabled = true, securedEnabled = true, jsr250Enabled = true)
 public class SecurityConfig extends WebSecurityConfigurerAdapter {
     /*
     /my-account - secured
@@ -57,7 +59,8 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
             .antMatchers("/my-account").hasRole("USER")
             .antMatchers("/my-balance").hasAnyRole("USER", "ADMIN")
             .antMatchers("/my-loans").hasRole("ROOT")
-            .antMatchers("/my-cards").authenticated()
+            .antMatchers("/my-cards").hasAnyRole("USER", "ADMIN")
+//            .antMatchers("/user").authenticated()
             .antMatchers("/notices").permitAll()
             .antMatchers("/contact").permitAll()
             // deny
